@@ -1,0 +1,156 @@
+import numpy as np
+from math import *
+
+G = 6.67408 * (10 ** (-11))
+M = np.zeros(shape=(12, 12))
+L = np.nonzero(M)
+
+M[0, 0], M[0, 8], M[4, 7], M[8, 3], M[11, 11], M[0, 2] = 1, 1, 1, 1, 1, 1
+
+A = (0, 0)
+B = (0, 8)
+C = (4, 7)
+D = (8, 3)
+E = (11, 11)
+F = (0, 2)
+
+counterForce= 1   # pour enumerer le nombre de points pour lesquels on a calculer une Force , attention reste global pas local!
+taille = np.shape(M)[0]
+coord = (0, 0, taille, taille)
+
+AOF = dict()  # dictionnaire des couples (points connus,masses)
+Forces = dict()  # dictionnaire des normes des forces
+A1, A2 = A, B
+AOF[A], AOF[B], AOF[C], AOF[D], AOF[E], AOF[F] = 1, 1, 1, 1, 1, 1
+ALL_POINTS = dict()   # dictionnaire des couples (points connus et les centres de gravites,masses)
+ALL_POINTS = AOF
+
+# ------------------------------
+def process2(M, level):
+    """Arguments :"""
+    global counterForce
+    Ms = decoupe(M)
+    for Mm in Ms:
+
+        L1 = listingPoints(Mm)
+        # cas numero 1 : leaf
+        if len(L1) == 0:
+            break
+        elif ((len(L1) == 1) and (L1[0]!=A)):
+            i=0    #rien a faire
+        # cas numero 2 : branch
+        elif len(L1) > 1:
+            G1 = cree_centre_de_gravite_2(L1)
+            (s, d) = calcul_s_d(M, A, G1)  # s est calcule par rapport  a la taille de la Matrice mere M ou de la matrice fille Mm??? si c est Fille mettre Mm au lieu de M
+            if (s / d) < 0.5:  # on peut  assimiler tous les corps en un seul point
+                L1.append(G1)
+            elif (s / d) >= 0.5:  # on doit traiter chaque corps individuellement
+                process2(Mm, level + 1)
+        for element in L1:
+           # print element
+            if (element!=A) and (element not in Forces.keys()): # evite de recalculer la force pour un  point deja utilise de la matrice mere
+                # en effet une sous matrice peut contenir un meme point de sa matrice mere!...
+                Norme = force(A, element)  # Error
+                Forces[element] = Norme
+                print 'la force ',counterForce,' est:'
+                print ((element,Norme))
+                counterForce+=1
+
+# ------------------------------
+def printMatrix(L, level, leaf):
+    # On realise l'arborescence, et on l'affiche
+    tab = repeat_to_length('\t', level + 1)
+    if leaf:
+        print(tab + 'leaf')
+    else:
+        print(tab + 'branch')
+
+
+def repeat_to_length(string_to_expand, length):
+    return (string_to_expand * (int(length / len(string_to_expand)) + 1))[:length]
+
+
+def processMatrix(M, level):
+    # 2. on decoupe la matrice en 4 sous matrices
+    Ms = decoupe(M)
+    for Mm in Ms:
+        # 3. on compte le nombre de point dans nos sous matrices
+        if countPoints(Mm) < 2:  # 3.1 on a au plus un point l'arbre s'arrete
+            printMatrix(Mm, level, True)
+        else:  # 3.2 on a au moins deux points
+            # recursivity
+            printMatrix(Mm, level, False)
+            processMatrix(Mm, level + 1)
+
+
+# 3.2.1 on recommence la decoupe selon le point 2.
+# ------------------------------
+
+def listingPoints(M):
+    """Arguments : la matrice M"""
+
+    L = np.nonzero(M)
+    L1 = []
+    for i in range(0, len(L[0])):
+        L1.append((L[0][i], L[1][i]))
+    return (L1)
+
+
+def decoupe(M):
+    """Argument : la matrice M """
+
+
+    size = M.shape
+    n = size[0]  # taille d'une ligne
+    m = size[1]  # taille d'une colonne
+    newSizeN = n // 2  # taille d'une ligne coupee en deux
+    newSizeM = m // 2  # taille d'une colonne coupee en deux
+    M1 = M[0:newSizeN, 0:newSizeM]  # Matrice nw
+    M2 = M[newSizeN:n, 0:newSizeM]  # Matrice sw
+    M3 = M[0:newSizeN, newSizeM:m]  # Matrice ne
+    M4 = M[newSizeN:n, newSizeM:m]  # Matrice se
+    return (M1, M2, M3, M4)
+
+
+def cree_centre_de_gravite_2(L):
+    """Argument : la liste L"""
+    """renvoie les coordonnees du centre de gravite"""
+    cgx_prime, cgy_prime, som_masse = 0, 0, 0
+
+    for element in L:
+
+        if element in AOF:
+           mass = AOF[element]
+        else:
+           mass = 1
+        cgx_prime += element[0] * mass
+        cgy_prime += element[1] * mass
+        som_masse += mass
+
+    cgx = int(cgx_prime / som_masse)
+    cgy = int(cgy_prime / som_masse)
+    ALL_POINTS[(cgx,cgy)]=1   # on ajoute ce centre de gravite au points exploitables par les formules
+
+    return (cgx, cgy)
+
+
+def force(A1, a2):
+    """Arguments : matrice M (pour le calcul de s&d) & les points A1 et A2"""
+    """renvoie la norme de la force"""
+    d = sqrt((abs(A1[0] - a2[0]) ** 2) + (abs(A1[1] - a2[1]) ** 2))
+    return (G * AOF.get(A1) * ALL_POINTS.get(A1)) / (d ** 2)
+
+
+def calcul_s_d(M, A1, A2):
+    """Arguments : la matrice M (pour le calcul de s) & les points A1 et A2"""
+
+    if A1 != A2:
+        d = sqrt((abs(A1[0] - A2[0]) ** 2) + (abs(A1[1] - A2[1]) ** 2))
+        s = np.shape(M)[0]
+        return (s, d)
+
+
+process2(M,0) #main
+print ("l'ensemble des forces associees a chaque point remarquable")
+print(Forces)
+"s=(np.shape(M)[0])/(2**level)"
